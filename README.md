@@ -124,6 +124,7 @@ flowchart LR
 - Node.js 20+
 - An Elasticsearch deployment
 - A Mistral API key with access to `mistral-large-4`
+- An ElevenLabs API key (optional, for report narration)
 
 ### 1. Configure the environment
 
@@ -138,6 +139,9 @@ ELASTIC_ENDPOINT=https://your-elasticsearch-endpoint
 ELASTIC_API_KEY=your-elasticsearch-api-key
 MISTRAL_API_KEY=your-mistral-api-key
 MISTRAL_MODEL=mistral-large-4
+ELEVENLABS_API_KEY=your-elevenlabs-api-key
+ELEVENLABS_VOICE_ID=JBFqnCBsd6RMkjVDRZzb
+ELEVENLABS_MODEL=eleven_multilingual_v2
 ```
 
 Never commit `.env`. It is excluded by `.gitignore`.
@@ -186,6 +190,7 @@ Open [http://localhost:8501](http://localhost:8501).
 | `GET /api/health` | Service and Mistral-model status |
 | `GET /api/overview` | Evidence-page metrics and chart data |
 | `POST /api/brief` | Evidence-bounded Mistral action brief |
+| `POST /api/speech` | ElevenLabs MP3 narration for the generated brief |
 | `GET /api/trees` | Weighted Elasticsearch neighborhood ranking |
 | `POST /api/trees/interpret` | Mistral natural-language weights plus before/after Elastic ranking |
 | `POST /api/bus/stress-test` | Mistral-selected assumption with deterministic break-even curves |

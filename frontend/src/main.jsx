@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { ArrowDown, ArrowRight, ArrowUp, BarChart3, Building2, Bus, Check, ChevronRight, CloudRain, Copy, DollarSign, ExternalLink, Fuel, Gauge, Leaf, LoaderCircle, MapPin, MessageSquareText, Search, ShieldCheck, SlidersHorizontal, Sparkles, Trees, TrendingUp, Wind, Zap } from 'lucide-react'
+import { ArrowDown, ArrowRight, ArrowUp, BarChart3, Building2, Bus, Check, ChevronRight, CloudRain, Copy, DollarSign, ExternalLink, Fuel, Gauge, Leaf, LoaderCircle, MapPin, MessageSquareText, Pause, Play, Search, ShieldCheck, SlidersHorizontal, Sparkles, Trees, TrendingUp, Volume2, Wind, Zap } from 'lucide-react'
 import './styles.css'
 import './scenario.css'
 import './explorers.css'
@@ -26,6 +26,9 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+  const [speechState, setSpeechState] = useState('idle')
+  const audioRef = useRef(null)
+  const audioUrlRef = useRef(null)
 
   useEffect(() => { fetch('/api/overview').then(r => r.ok ? r.json() : Promise.reject(r)).then(setOverview).catch(() => setError('The evidence service is starting. Refresh in a moment.')) }, [])
 
@@ -44,6 +47,50 @@ function App() {
     const text = `${brief.headline}\n\n${brief.direct_answer}\n\n${brief.why_it_matters}\n\nAction plan\n${brief.actions.map(x=>`• ${x}`).join('\n')}`
     navigator.clipboard.writeText(text); setCopied(true); setTimeout(()=>setCopied(false), 1800)
   }
+
+  function briefAsSpeech() {
+    return [
+      brief.headline,
+      `Recommendation. ${brief.direct_answer}`,
+      `Why it matters. ${brief.why_it_matters}`,
+      'Action plan.',
+      ...brief.actions.map((item, index) => `Step ${index + 1}. ${item}`),
+      'How to measure success.',
+      ...brief.success_measures,
+      'Important limitations.',
+      ...brief.limits,
+    ].join('\n\n')
+  }
+
+  async function toggleSpeech() {
+    if (speechState === 'playing') {
+      audioRef.current?.pause(); setSpeechState('paused'); return
+    }
+    if (speechState === 'paused' && audioRef.current) {
+      await audioRef.current.play(); setSpeechState('playing'); return
+    }
+    setSpeechState('loading'); setError('')
+    try {
+      const response = await fetch('/api/speech', {
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({text: briefAsSpeech()}),
+      })
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}))
+        throw new Error(body.detail || 'Unable to create narration.')
+      }
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current)
+      audioUrlRef.current = URL.createObjectURL(await response.blob())
+      audioRef.current = new Audio(audioUrlRef.current)
+      audioRef.current.onended = () => setSpeechState('idle')
+      audioRef.current.onerror = () => { setSpeechState('idle'); setError('The narration could not be played.') }
+      await audioRef.current.play(); setSpeechState('playing')
+    } catch (e) { setSpeechState('idle'); setError(e.message) }
+  }
+
+  useEffect(() => () => {
+    audioRef.current?.pause()
+    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current)
+  }, [])
 
   return <div className="app-shell">
     <header className="topbar">
@@ -94,7 +141,7 @@ function App() {
 
         {error && <div className="error-card" role="alert">{error}</div>}
         {brief && <section className="brief-result" aria-live="polite">
-          <div className="brief-header"><div><div className="eyebrow"><MessageSquareText size={15}/> Mistral recommendation</div><h2>{brief.headline}</h2></div><button className="icon-button" onClick={copyBrief} aria-label="Copy briefing">{copied?<Check/>:<Copy/>}</button></div>
+          <div className="brief-header"><div><div className="eyebrow"><MessageSquareText size={15}/> Mistral recommendation</div><h2>{brief.headline}</h2></div><div className="brief-actions"><button className="speak-button" onClick={toggleSpeech} disabled={speechState==='loading'}>{speechState==='loading'?<LoaderCircle className="spin"/>:speechState==='playing'?<Pause/>:speechState==='paused'?<Play/>:<Volume2/>}<span>{speechState==='loading'?'Creating audio…':speechState==='playing'?'Pause':speechState==='paused'?'Resume':'Read aloud'}</span><small>ElevenLabs</small></button><button className="icon-button" onClick={copyBrief} aria-label="Copy briefing">{copied?<Check/>:<Copy/>}</button></div></div>
           <div className="decision-callout"><span>WHAT YOU SHOULD DO</span><p>{brief.direct_answer}</p></div>
           <p className="why"><b>Why it matters</b>{brief.why_it_matters}</p>
           <div className="brief-columns">

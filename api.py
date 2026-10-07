@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Query
+import requests
+from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -33,6 +35,10 @@ app.add_middleware(
 class BriefRequest(BaseModel):
     audience: str
     question: str
+
+
+class SpeechRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=10_000)
 
 
 class TreeInstructionRequest(BaseModel):
@@ -189,6 +195,47 @@ def brief(request: BriefRequest) -> dict:
         return result.model_dump()
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Mistral briefing failed evidence validation: {exc}") from exc
+
+
+@app.post("/api/speech")
+def speech(request: SpeechRequest) -> Response:
+    """Render a generated brief as speech without exposing the ElevenLabs key."""
+    api_key = os.getenv("ELEVENLABS_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="ElevenLabs is not configured. Add ELEVENLABS_API_KEY to .env.")
+
+    voice_id = os.getenv("ELEVENLABS_VOICE_ID", "JBFqnCBsd6RMkjVDRZzb")
+    model_id = os.getenv("ELEVENLABS_MODEL", "eleven_multilingual_v2")
+    try:
+        result = requests.post(
+            f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+            params={"output_format": "mp3_44100_128"},
+            headers={"xi-api-key": api_key, "Content-Type": "application/json"},
+            json={
+                "text": request.text,
+                "model_id": model_id,
+                "voice_settings": {"stability": 0.55, "similarity_boost": 0.75, "style": 0.15},
+            },
+            timeout=60,
+        )
+        result.raise_for_status()
+    except requests.HTTPError as exc:
+        status = exc.response.status_code if exc.response is not None else 502
+        if status in {401, 403}:
+            detail = "ElevenLabs rejected the API key or voice permissions."
+        elif status == 429:
+            detail = "ElevenLabs rate limit or credit limit reached."
+        else:
+            detail = "ElevenLabs could not generate this audio."
+        raise HTTPException(status_code=502, detail=detail) from exc
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail="Could not reach ElevenLabs.") from exc
+
+    return Response(
+        content=result.content,
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
 
 
 @app.get("/api/trees")
