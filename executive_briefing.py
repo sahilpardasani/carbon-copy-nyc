@@ -58,7 +58,10 @@ def _intent(question: str, audience: str) -> str:
 
 
 def _numbers(text: str) -> set[str]:
-    return {token.replace(",", "") for token in re.findall(r"(?<![A-Za-z])\d[\d,.]*", text)}
+    # The old pattern included sentence-ending periods ("2026."), causing a
+    # supported year to differ from the same year elsewhere in a sentence.
+    # Strip separators only after extraction so real decimals remain strict.
+    return {token.replace(",", "").rstrip(".") for token in re.findall(r"(?<![A-Za-z])\d[\d,.]*", text)}
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
