@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { ArrowRight, BarChart3, Building2, Bus, Check, ChevronRight, CloudRain, Copy, DollarSign, ExternalLink, Fuel, Leaf, LoaderCircle, MapPin, MessageSquareText, Search, ShieldCheck, SlidersHorizontal, Sparkles, Trees, TrendingUp, Wind, Zap } from 'lucide-react'
+import { ArrowDown, ArrowRight, ArrowUp, BarChart3, Building2, Bus, Check, ChevronRight, CloudRain, Copy, DollarSign, ExternalLink, Fuel, Gauge, Leaf, LoaderCircle, MapPin, MessageSquareText, Search, ShieldCheck, SlidersHorizontal, Sparkles, Trees, TrendingUp, Wind, Zap } from 'lucide-react'
 import './styles.css'
 import './scenario.css'
 import './explorers.css'
@@ -135,6 +135,10 @@ function TreePriorityExplorer({initial=[]}) {
   const [weights, setWeights] = useState({vulnerability:50, vegetation:35, ac_access:15})
   const [rows, setRows] = useState(initial)
   const [loading, setLoading] = useState(false)
+  const [instruction, setInstruction] = useState('Prioritize neighborhoods with little greenery and poor access to air conditioning. Show what changes from our current tree plan.')
+  const [interpreting, setInterpreting] = useState(false)
+  const [mistralResult, setMistralResult] = useState(null)
+  const [treeError, setTreeError] = useState('')
   useEffect(() => { if (initial?.length && !rows?.length) setRows(initial) }, [initial])
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -147,26 +151,49 @@ function TreePriorityExplorer({initial=[]}) {
     }, 180)
     return () => clearTimeout(timer)
   }, [weights])
-  const maxTrees = Math.max(...rows.map(x=>x.trees), 1)
+  const visibleRows = mistralResult?.neighborhoods || rows
+  const maxTrees = Math.max(...visibleRows.map(x=>x.trees), 1)
   const controls = [
     ['vulnerability','Heat danger','How vulnerable residents are during extreme heat'],
     ['vegetation','Low vegetation','How little green space the neighborhood has'],
     ['ac_access','Limited A/C','How many homes lack air conditioning'],
   ]
+  async function interpretPriorities() {
+    setInterpreting(true); setTreeError('')
+    try {
+      const response = await fetch('/api/trees/interpret', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({instruction,current_weights:weights})})
+      const body = await response.json()
+      if (!response.ok) throw new Error(body.detail || 'Mistral could not interpret this request.')
+      setWeights(body.weights); setRows(body.neighborhoods); setMistralResult(body)
+    } catch (e) { setTreeError(e.message) } finally { setInterpreting(false) }
+  }
   return <article className="data-card wide tree-explorer">
     <header><div><span>THE NEXT 100 TREES</span><h2>Change the priorities. Watch the map shift.</h2><p>Elasticsearch reranks NYC neighborhoods every time you move a policy weight.</p></div><SlidersHorizontal/></header>
+    <div className="natural-control">
+      <div className="natural-label"><Sparkles size={16}/><span><b>Tell Mistral what you care about</b><small>It will set explicit weights, rerun Elasticsearch, and compare the rankings.</small></span></div>
+      <div className="natural-input"><input value={instruction} onChange={e=>setInstruction(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')interpretPriorities()}} aria-label="Describe tree planning priorities"/><button onClick={interpretPriorities} disabled={interpreting||!instruction.trim()}>{interpreting?<LoaderCircle className="spin"/>:<Sparkles/>}{interpreting?'Translating…':'Apply with Mistral'}</button></div>
+      {treeError&&<p className="inline-error">{treeError}</p>}
+      {mistralResult&&<div className="mistral-interpretation"><Sparkles size={15}/><span><b>Mistral interpreted your request:</b> {mistralResult.interpretation}</span></div>}
+    </div>
     <div className="tree-layout">
       <div className="tree-controls">
-        {controls.map(([key,label,help])=><label className="weight-control" key={key}><div><span><b>{label}</b><small>{help}</small></span><output>{weights[key]}%</output></div><input type="range" min="0" max="100" value={weights[key]} onChange={e=>setWeights({...weights,[key]:Number(e.target.value)})} style={{'--range-progress':`${weights[key]}%`}}/></label>)}
+        {controls.map(([key,label,help])=><label className="weight-control" key={key}><div><span><b>{label}</b><small>{help}</small></span><output>{weights[key]}%</output></div><input type="range" min="0" max="100" value={weights[key]} onChange={e=>{setMistralResult(null);setWeights({...weights,[key]:Number(e.target.value)})}} style={{'--range-progress':`${weights[key]}%`}}/></label>)}
         <div className="weight-total"><span>Relative emphasis</span><b>{Object.values(weights).reduce((a,b)=>a+b,0)} points</b></div>
       </div>
       <div className={`tree-results ${loading?'is-loading':''}`}>
-        <div className="tree-result-head"><span>Highest-priority neighborhoods</span><span>{loading?'Reranking…':'100 trees allocated'}</span></div>
-        {rows.slice(0,7).map((x,i)=><div className="tree-rank" key={x.nta_code}><span className="tree-position">{String(i+1).padStart(2,'0')}</span><div><b>{x.neighborhood}</b><small>HVI {x.hvi}/5 · {x.green_space_pct.toFixed(0)}% green · {x.ac_access_pct.toFixed(0)}% A/C</small></div><span className="tree-allocation"><i style={{width:`${x.trees/maxTrees*100}%`}}></i></span><strong>{x.trees}</strong></div>)}
+        <div className="tree-result-head"><span>{mistralResult?'Ranking change':'Highest-priority neighborhoods'}</span><span>{loading?'Reranking…':'100 trees allocated'}</span></div>
+        {visibleRows.slice(0,7).map((x,i)=><div className="tree-rank" key={x.nta_code}><span className="tree-position">{String(i+1).padStart(2,'0')}</span><div><b>{x.neighborhood}</b><small>HVI {x.hvi}/5 · {x.green_space_pct.toFixed(0)}% green · {x.ac_access_pct.toFixed(0)}% A/C</small></div><span className="tree-allocation"><i style={{width:`${x.trees/maxTrees*100}%`}}></i></span>{mistralResult?<RankChange row={x}/>:<strong>{x.trees}</strong>}</div>)}
       </div>
     </div>
     <p className="explorer-note">This identifies neighborhoods for planning—not exact planting sites. Utilities, sidewalk space, ownership, species fit and maintenance still require field checks.</p>
   </article>
+}
+
+function RankChange({row}) {
+  if (row.is_new) return <strong className="rank-new">NEW</strong>
+  if (row.rank_change > 0) return <strong className="rank-up"><ArrowUp/> {row.rank_change}</strong>
+  if (row.rank_change < 0) return <strong className="rank-down"><ArrowDown/> {Math.abs(row.rank_change)}</strong>
+  return <strong className="rank-same">—</strong>
 }
 
 function BuildingTwinSearch() {
@@ -218,6 +245,10 @@ function moneyMillions(value) { return `$${Math.abs(value / 1_000_000).toFixed(1
 function BusScenarioExplorer({data}) {
   const [dieselPrice, setDieselPrice] = useState(data?.january_diesel_price || 3.52)
   const [electricityPrice, setElectricityPrice] = useState(data?.electricity_price || .1966)
+  const [stressQuestion, setStressQuestion] = useState('You recommend electric buses. Under what conditions does that recommendation stop making financial sense?')
+  const [stressResult, setStressResult] = useState(null)
+  const [stressLoading, setStressLoading] = useState(false)
+  const [stressError, setStressError] = useState('')
   useEffect(() => {
     if (data) { setDieselPrice(data.january_diesel_price); setElectricityPrice(data.electricity_price) }
   }, [data])
@@ -228,6 +259,16 @@ function BusScenarioExplorer({data}) {
   const savings = dieselCost - electricCost
   const maxCost = Math.max(dieselCost, electricCost, 1)
   const isSaving = savings >= 0
+
+  async function runStressTest() {
+    setStressLoading(true); setStressError(''); setStressResult(null)
+    try {
+      const response = await fetch('/api/bus/stress-test', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({question:stressQuestion,diesel_price:dieselPrice,electricity_price:electricityPrice,kwh_per_mile:data.electric_kwh_per_mile})})
+      const body = await response.json()
+      if (!response.ok) throw new Error(body.detail || 'Unable to run the stress test.')
+      setStressResult(body)
+    } catch (e) { setStressError(e.message) } finally { setStressLoading(false) }
+  }
 
   return <article className="data-card wide scenario-card">
     <header className="scenario-heading">
@@ -265,8 +306,39 @@ function BusScenarioExplorer({data}) {
         </div>
       </div>
     </div>
+    <section className="stress-lab">
+      <div className="stress-intro"><div className="natural-label"><Gauge size={18}/><span><b>What would change your mind?</b><small>Ask Mistral to choose the toughest assumption. Python calculates the break-even point.</small></span></div></div>
+      <div className="stress-input"><input value={stressQuestion} onChange={e=>setStressQuestion(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')runStressTest()}} aria-label="Ask a bus recommendation stress-test question"/><button onClick={runStressTest} disabled={stressLoading||!stressQuestion.trim()}>{stressLoading?<LoaderCircle className="spin"/>:<Sparkles/>}{stressLoading?'Stress-testing…':'Challenge the recommendation'}</button></div>
+      {stressError&&<p className="inline-error">{stressError}</p>}
+      {stressResult&&<StressTestResult result={stressResult}/>}
+    </section>
     <p className="scenario-note"><ShieldCheck size={15}/> Energy only—not a total-cost forecast. Bus purchases, chargers, depots, financing, maintenance, batteries and demand charges are excluded. WTI and diesel use different units and are shown as separate trends.</p>
   </article>
+}
+
+function StressTestResult({result}) {
+  const isPower = result.selected_test==='electricity_ceiling'
+  const isEfficiency = result.selected_test==='bus_efficiency'
+  const curve = isPower ? result.electricity_curve : isEfficiency ? result.efficiency_curve : result.diesel_curve
+  const xKey = isPower ? 'electricity_price' : isEfficiency ? 'kwh_per_mile' : 'diesel_price'
+  const label = isPower ? 'Electricity price ($/kWh)' : isEfficiency ? 'Bus energy use (kWh/mile)' : 'Diesel price ($/gallon)'
+  const values = curve.map(x=>x.savings_millions)
+  const maxAbs = Math.max(...values.map(Math.abs),1)
+  const points = curve.map((x,i)=>`${6+i*(88/(curve.length-1))},${50-(x.savings_millions/maxAbs)*38}`).join(' ')
+  const finding = result.selected_test==='electricity_ceiling'
+    ? `Electric energy loses its modeled operating-cost advantage above $${result.break_even_electricity_price.toFixed(3)}/kWh in the ${result.reference_case} case.`
+    : result.selected_test==='bus_efficiency'
+      ? `The modeled bus could use up to ${result.break_even_kwh_per_mile.toFixed(2)} kWh/mile before electric energy costs equal diesel in the ${result.reference_case} case.`
+      : `Diesel would need to fall to about $${result.break_even_diesel_price.toFixed(3)}/gallon before the modeled energy costs are equal.`
+  return <div className="stress-result">
+    <div className="mistral-interpretation"><Sparkles size={15}/><span><b>Mistral selected:</b> {result.selected_test.replaceAll('_',' ')} using the {result.reference_case} case. {result.mistral_rationale}</span></div>
+    <div className="stress-grid">
+      <div className="stress-finding"><span>BREAK-EVEN FINDING</span><h3>{finding}</h3><p>At the selected reference assumptions, electric operation is <b>${Math.abs(result.current_savings_millions).toFixed(1)}M {result.current_savings_millions>=0?'lower':'higher'}</b> in annual energy spending.</p></div>
+      <div className="break-even-chart"><div className="chart-title"><span>{label}</span><b>Annual energy-cost advantage</b></div><svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="Break-even sensitivity curve"><line x1="6" y1="50" x2="94" y2="50" className="zero-line"/><polygon points={`6,50 ${points} 94,50`} className="stress-area"/><polyline points={points} className="stress-line" vectorEffect="non-scaling-stroke"/></svg><div className="stress-axis"><span>{curve[0][xKey].toFixed(2)}</span><span>break-even</span><span>{curve[curve.length-1][xKey].toFixed(2)}</span></div></div>
+    </div>
+    <div className="break-even-cards"><div><Fuel/><span><small>Diesel floor</small><b>${result.break_even_diesel_price.toFixed(3)}/gal</b></span></div><div><Zap/><span><small>Power ceiling</small><b>${result.break_even_electricity_price.toFixed(3)}/kWh</b></span></div><div><Gauge/><span><small>Efficiency ceiling</small><b>{result.break_even_kwh_per_mile.toFixed(2)} kWh/mi</b></span></div></div>
+    <p className="stress-scope">{result.scope}</p>
+  </div>
 }
 
 function MiniLineChart({title, unit, data=[], color}) {

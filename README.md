@@ -16,9 +16,13 @@ Choose an audience and ask a plain-English policy question. Mistral Large 4 retu
 
 Move diesel and electricity price sliders to see annual energy spending change immediately. The model uses reported FY2024 diesel-bus travel as a shared baseline and clearly excludes vehicle purchases, charging infrastructure, depot construction, financing, maintenance, batteries, and demand charges.
 
+Ask **“What would change your mind?”** and Mistral selects the most relevant assumption to challenge. Python then calculates the diesel-price floor, electricity-price ceiling, bus-efficiency ceiling, and a break-even sensitivity curve. This makes the recommendation falsifiable instead of presenting a single favorable scenario.
+
 ### Prioritize the next 100 trees
 
 Change the relative importance of heat vulnerability, vegetation deficit, and limited household air-conditioning access. Elasticsearch reranks NYC neighborhoods and reallocates a fixed 100-tree planning pool after every adjustment.
+
+The controls also accept natural language. Mistral converts a planner's request into normalized, explicit weights; Elasticsearch reruns the ranking; and the interface marks which neighborhoods moved up, moved down, or newly entered the priority list.
 
 ### Find a building's greener twin
 
@@ -183,6 +187,8 @@ Open [http://localhost:8501](http://localhost:8501).
 | `GET /api/overview` | Evidence-page metrics and chart data |
 | `POST /api/brief` | Evidence-bounded Mistral action brief |
 | `GET /api/trees` | Weighted Elasticsearch neighborhood ranking |
+| `POST /api/trees/interpret` | Mistral natural-language weights plus before/after Elastic ranking |
+| `POST /api/bus/stress-test` | Mistral-selected assumption with deterministic break-even curves |
 | `GET /api/buildings/search` | Building autocomplete and fuzzy search |
 | `GET /api/buildings/{property_id}/peers` | Comparable-building benchmark |
 

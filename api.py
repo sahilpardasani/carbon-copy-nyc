@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from bus_scenario import (
     DEFAULT_ELECTRIC_KWH_PER_MILE,
@@ -15,7 +16,7 @@ from bus_scenario import (
     fetch_diesel_prices,
     fetch_wti_prices,
 )
-from carbon_copy import INDEX_NAME, elastic_client, find_peers, search_buildings
+from carbon_copy import INDEX_NAME, elastic_client, find_peers, mistral_structured, search_buildings
 from climate_signals import ensure_climate_signals
 from executive_briefing import JAN_2026_DIESEL_AVG, SEP_2026_DIESEL_AVG, _dynamic_brief, _fallback_topic
 from heat_priority import allocate_trees, ensure_heat_data, rank_neighborhoods
@@ -32,6 +33,43 @@ app.add_middleware(
 class BriefRequest(BaseModel):
     audience: str
     question: str
+
+
+class TreeInstructionRequest(BaseModel):
+    instruction: str = Field(min_length=3, max_length=500)
+    current_weights: dict[str, int] | None = None
+
+
+class TreeWeightIntent(BaseModel):
+    vulnerability: int = Field(ge=0, le=100)
+    vegetation: int = Field(ge=0, le=100)
+    ac_access: int = Field(ge=0, le=100)
+    interpretation: str
+
+
+class BusStressRequest(BaseModel):
+    question: str = Field(min_length=3, max_length=500)
+    diesel_price: float = Field(ge=0.5, le=15)
+    electricity_price: float = Field(ge=0.03, le=1.5)
+    kwh_per_mile: float = Field(ge=1.0, le=8.0)
+
+
+class BusStressIntent(BaseModel):
+    primary_test: Literal["diesel_floor", "electricity_ceiling", "bus_efficiency", "combined"]
+    reference_case: Literal["current", "january", "september"]
+    rationale: str
+
+
+def _normalize_weights(intent: TreeWeightIntent) -> dict[str, int]:
+    values = [intent.vulnerability, intent.vegetation, intent.ac_access]
+    total = sum(values)
+    if total <= 0:
+        return {"vulnerability": 34, "vegetation": 33, "ac_access": 33}
+    raw = [value * 100 / total for value in values]
+    rounded = [int(value) for value in raw]
+    for idx in sorted(range(3), key=lambda i: raw[i] - rounded[i], reverse=True)[: 100 - sum(rounded)]:
+        rounded[idx] += 1
+    return dict(zip(("vulnerability", "vegetation", "ac_access"), rounded))
 
 
 @lru_cache(maxsize=1)
@@ -164,6 +202,156 @@ def trees(
     es = elastic_client()
     rows = allocate_trees(rank_neighborhoods(es, vulnerability, vegetation, ac_access, size=10))
     return {"weights": {"vulnerability": vulnerability, "vegetation": vegetation, "ac_access": ac_access}, "neighborhoods": rows}
+
+
+@app.post("/api/trees/interpret")
+def interpret_tree_priorities(request: TreeInstructionRequest) -> dict:
+    current = request.current_weights or {"vulnerability": 50, "vegetation": 35, "ac_access": 15}
+    try:
+        intent = mistral_structured(
+            TreeWeightIntent,
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "Translate an NYC tree-prioritization request into three relative policy weights. "
+                        "vulnerability means danger to residents during extreme heat; vegetation means lack of green "
+                        "space; ac_access means households without air conditioning. Use the full 0-100 range to show "
+                        "meaningful preferences. Explain the interpretation in one plain-English sentence. Do not claim "
+                        "that the weights identify exact planting sites."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": f"Current weights: {current}. Planner request: {request.instruction}",
+                },
+            ],
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Mistral could not interpret the tree priorities: {exc}") from exc
+
+    proposed = _normalize_weights(intent)
+    es = elastic_client()
+    before = allocate_trees(
+        rank_neighborhoods(
+            es,
+            int(current.get("vulnerability", 50)),
+            int(current.get("vegetation", 35)),
+            int(current.get("ac_access", 15)),
+            size=10,
+        )
+    )
+    after = allocate_trees(
+        rank_neighborhoods(es, proposed["vulnerability"], proposed["vegetation"], proposed["ac_access"], size=10)
+    )
+    before_positions = {row["nta_code"]: idx + 1 for idx, row in enumerate(before)}
+    changes = []
+    for idx, row in enumerate(after):
+        previous = before_positions.get(row["nta_code"])
+        changes.append(
+            {
+                **row,
+                "previous_rank": previous,
+                "rank_change": (previous - (idx + 1)) if previous is not None else None,
+                "is_new": previous is None,
+            }
+        )
+    return {
+        "weights": proposed,
+        "previous_weights": current,
+        "interpretation": intent.interpretation,
+        "neighborhoods": changes,
+    }
+
+
+@app.post("/api/bus/stress-test")
+def stress_test_bus(request: BusStressRequest) -> dict:
+    try:
+        intent = mistral_structured(
+            BusStressIntent,
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are choosing the most decision-relevant stress test for an NYC electric-bus energy-cost "
+                        "scenario. Choose diesel_floor when the key question is how cheap diesel must become, "
+                        "electricity_ceiling when it is how expensive power can become, bus_efficiency when vehicle "
+                        "energy use is central, or combined when several assumptions are explicitly requested. Choose "
+                        "current, January, or September as the comparison case. Give a short rationale with no new facts."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Question: {request.question}. Current diesel price: {request.diesel_price}. "
+                        f"Current electricity price: {request.electricity_price}. Current bus energy use: "
+                        f"{request.kwh_per_mile} kWh per mile. January and September are verified observed price cases."
+                    ),
+                },
+            ],
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Mistral could not choose the stress test: {exc}") from exc
+
+    reference_diesel = {
+        "current": request.diesel_price,
+        "january": JAN_2026_DIESEL_AVG,
+        "september": SEP_2026_DIESEL_AVG,
+    }[intent.reference_case]
+    electric_kwh = DIESEL_MILES * request.kwh_per_mile
+    electric_cost = electric_kwh * request.electricity_price
+    diesel_cost = DIESEL_GALLONS * reference_diesel
+    break_even_diesel = electric_cost / DIESEL_GALLONS
+    break_even_electricity = diesel_cost / electric_kwh
+    break_even_efficiency = diesel_cost / (DIESEL_MILES * request.electricity_price)
+    current_savings = diesel_cost - electric_cost
+
+    diesel_curve = []
+    for step in range(17):
+        price = 1.0 + step * 0.5
+        diesel_curve.append(
+            {
+                "diesel_price": round(price, 2),
+                "savings_millions": round((DIESEL_GALLONS * price - electric_cost) / 1_000_000, 2),
+            }
+        )
+    electricity_curve = []
+    for step in range(16):
+        price = 0.05 + step * 0.025
+        electricity_curve.append(
+            {
+                "electricity_price": round(price, 3),
+                "savings_millions": round((diesel_cost - electric_kwh * price) / 1_000_000, 2),
+            }
+        )
+    efficiency_curve = []
+    for step in range(16):
+        efficiency = 1.5 + step * 0.35
+        efficiency_curve.append(
+            {
+                "kwh_per_mile": round(efficiency, 2),
+                "savings_millions": round(
+                    (diesel_cost - DIESEL_MILES * efficiency * request.electricity_price) / 1_000_000, 2
+                ),
+            }
+        )
+    return {
+        "selected_test": intent.primary_test,
+        "reference_case": intent.reference_case,
+        "mistral_rationale": intent.rationale,
+        "reference_diesel_price": round(reference_diesel, 4),
+        "current_savings_millions": round(current_savings / 1_000_000, 2),
+        "break_even_diesel_price": round(break_even_diesel, 3),
+        "break_even_electricity_price": round(break_even_electricity, 3),
+        "break_even_kwh_per_mile": round(break_even_efficiency, 2),
+        "diesel_curve": diesel_curve,
+        "electricity_curve": electricity_curve,
+        "efficiency_curve": efficiency_curve,
+        "scope": (
+            "Energy spending only. Vehicle purchases, chargers, depots, financing, maintenance, batteries, and demand "
+            "charges are outside this break-even test."
+        ),
+    }
 
 
 @app.get("/api/buildings/search")
