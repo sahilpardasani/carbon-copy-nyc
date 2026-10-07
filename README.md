@@ -1,176 +1,256 @@
-# Elastic × Mistral NYC Hack Night
+# Carbon Copy NYC
 
-Welcome to the **Elastic × Mistral NYC Hack Night**! Tonight you'll build something that uses tech from **Elastic** and **Mistral AI** to work with **open NYC data** — a search experience, a RAG app, an analytics pipeline, an agent, a multilingual voice agent - whatever brings your idea to life. Mix and match however suits your idea.
+**An evidence-backed climate policy copilot for New York City.**
 
-The theme is **New York City**. The city publishes an enormous amount of open data — restaurant inspections, 311 complaints, a squirrel census, live transit feeds, and much more. Your job is to turn some slice of it into something that reasons, answers, and surprises. Semantic search, a RAG chatbot, a conversational analyst, a moderation pipeline — if it combines Elastic and Mistral, we want to see it.
+Carbon Copy turns public climate data into decisions a mayor, council member, building owner, or advocate can understand and act on. It combines Elasticsearch retrieval and ranking with Mistral Large 4 brief generation, while keeping observed facts, modeled scenarios, and assumptions visibly separate.
 
-**Date:** October 7, 2026
-**Location:** Elastic NYC Office
-**Hack time:** ~3 hours
+The result is not another generic climate chatbot. Every number shown to the model comes from a bounded evidence packet, and every interactive scenario exposes its assumptions.
 
-> **This is a hack about ideas, not interfaces.** We are judging how creatively and effectively you combine **Elastic** and **Mistral tech** — not how your project looks. You do **not** need a polished front-end, and fancy JavaScript or slick animations win you nothing. A notebook, a Dev Tools session, a terminal script, or Kibana itself is a perfectly good way to demo. Spend your three hours on the data and the ideas.
+## What you can do
 
----
+### Ask Mistral for an action brief
 
-## Schedule
+Choose an audience and ask a plain-English policy question. Mistral Large 4 returns a direct recommendation, concrete action plan, measurable success criteria, limitations, and evidence identifiers. Generated numbers are validated against the retrieved evidence before a brief is returned.
 
-**5:00 PM – Doors open:**
-Grab food and drinks, meet other attendees, and get settled.
+### Model electric-bus operating costs
 
-**5:30 PM – Kickoff and demo:**
-We'll introduce the challenge, walk through the tools, and share the starter resources.
+Move diesel and electricity price sliders to see annual energy spending change immediately. The model uses reported FY2024 diesel-bus travel as a shared baseline and clearly excludes vehicle purchases, charging infrastructure, depot construction, financing, maintenance, batteries, and demand charges.
 
-**5:45 PM – Build time:**
-Choose an idea and start building. Mentors from Mistral AI and Elastic will be available to help.
+### Prioritize the next 100 trees
 
-**8:00 PM – Show and tell:**
-Share what you built with the room, no matter how finished it is. After the demos, we'll award prizes to the top projects.
+Change the relative importance of heat vulnerability, vegetation deficit, and limited household air-conditioning access. Elasticsearch reranks NYC neighborhoods and reallocates a fixed 100-tree planning pool after every adjustment.
 
----
+### Find a building's greener twin
 
-## Judging Criteria and Presentations
+Search 14,281 NYC multifamily disclosures by building name, address, or ZIP code. Carbon Copy finds comparable properties by use, reporting year, size, and construction year, then shows the peer median, benchmark gap, and three lower-emissions comparables.
 
-Projects will be evaluated on:
+### Explore NYC climate evidence
 
-| Criteria | Description |
+The Evidence view also surfaces measured flooding, future flood exposure, constructed green infrastructure, neighborhood air quality, and heat indicators.
+
+## Why Elasticsearch and Mistral
+
+| Technology | Role in Carbon Copy |
 |---|---|
-| **Novelty** | A unique idea, a novel use of the data, or an interesting technical approach. |
-| **Use of Elastic** | Meaningful use of Elasticsearch — search, aggregations, vector/semantic search. Agent Builder is a bonus, not a requirement. |
-| **Use of Mistral** | Meaningful use of Mistral — its APIs, products, creation tools like the Vibe coding CLI, or the AI capabilities behind them. |
+| **Elasticsearch** | Building autocomplete, fuzzy address search, structured peer filters, medians, neighborhood script scoring, ranking, and climate-signal retrieval. |
+| **Mistral Large 4** | Converts bounded evidence into audience-specific policy recommendations and structured action briefs. |
+| **Deterministic Python** | Calculates costs, emissions gaps, peer comparisons, allocations, and model validation. Mistral does not invent these numbers. |
+| **React + FastAPI** | Provides the interactive interface and a thin API over the existing analysis modules. |
 
-At the end you'll present what you built — no matter how finished it is. Show it off even if it's rough; that's the spirit of the night.
+## How the two core technologies work together
 
-Some presentation guidelines:
-- **3-minute demo** of what you built. No polished UI expected — a notebook, Dev Tools, a script, or Kibana is fine.
-- Show the **Elastic** portion (your queries, mappings, or tools) and the **Mistral** portion (which Mistral tech you used and where). Those two, plus any accompanying tech, must be part of the demo.
+### Elasticsearch: retrieval, comparison, and transparent ranking
 
-**Submission:** Submit your final project on the [Mistral x Elastic Hackathon DevPost page](https://mistral-x-elastic-hackathon.devpost.com/?preview_token=tz74zdFHpy5jjL9JWIN2YChGi9WCsrYac4nL2mZ2ppE%3D).
+The application uses Elasticsearch as its analytical retrieval layer—not simply as document storage.
 
----
+**Building search and greener twins**
 
-## What you can build
+1. NYC disclosure records are normalized and indexed with text, keyword, numeric, and geo fields.
+2. Autocomplete searches `property_name`, `address`, `postal_code`, and a combined `search_text` field using boosted multi-field matching and fuzzy spelling tolerance.
+3. After a user selects a building, a bool query filters candidates to the same property type and reporting year, then applies floor-area and construction-year ranges.
+4. If a building is unusual, Carbon Copy widens those ranges in documented stages rather than silently returning unrelated peers.
+5. Numeric sorting and peer aggregation identify lower-emissions examples and the comparable-building median.
 
-Anything that combines **Elastic** and **Mistral** tech on NYC data. There's no required architecture -  approach it in the way that best suits your idea. You might put Elasticsearch at the center, call Mistral APIs from your own code and index the results, build with Mistral's tools and Elastic's side by side, or something we haven't thought of. Some starter ideas:
+**Tree allocation**
 
-- **Start from Elastic.** Pick a dataset from the table below, run its ingest notebook to load it into Elasticsearch, then bring in Mistral: embeddings for semantic search, a chat model for RAG, OCR, Voxtral audio, moderation, an agent.
-- **Start from Mistral.** Build a Mistral agent, an OCR or voice pipeline, or an app you vibe-code with Mistral Vibe, then bring in Elasticsearch to search, retrieve, aggregate, or remember what your app produces.
+The heat tool sends the user's three policy weights into an Elasticsearch `script_score` query. The script normalizes heat vulnerability, vegetation deficit, and household A/C deficit, calculates a visible priority score, and returns a new ranking. Python then distributes exactly 100 planning trees in proportion to those scores.
 
-Either way, your project needs both, and how you combine them is up to you. See [open_challenge.md](open_challenge.md) for ideas, the [Mistral guide](mistral_guide.md) for building with Mistral, and [Using Mistral in Elasticsearch](using_mistral_in_elasticsearch.md) for wiring Mistral models into Elastic.
+**Climate evidence retrieval**
 
-To get set up:
-- **Elastic:** use a serverless deployment from the [Elastic Cloud Serverless free trial](https://cloud.elastic.co/serverless-registration?utm_source=github&utm_medium=event&utm_campaign=2026-10-07-elastic-mistral-nyc-hacknight-amer&utm_content=link).
-- **Mistral:** see the [Mistral guide](mistral_guide.md).
+Flood observations, future flood exposure, green-infrastructure status, and neighborhood air-quality signals are indexed as queryable evidence. The API retrieves bounded top results and summary counts for the dashboard and Mistral evidence packet.
 
-> **Agent frameworks are optional.** Elastic [Agent Builder](https://www.elastic.co/docs/explore-analyze/ai-features/elastic-agent-builder) is a slick, no-code way to stand up a conversational agent over your indices. Mistral's [Agents API](https://docs.mistral.ai/studio/agents/introduction) gives you agents with built-in tools (web search, code interpreter, document library), function calling, and handoffs, and [Vibe Work](https://docs.mistral.ai/vibe/work/get-started) lets you run agentic tasks with MCP connectors in the browser. Use either, both, or neither. A RAG script, a semantic-search demo, or an analytics notebook counts just as much.
+### Mistral Large 4: reasoning over verified evidence
 
----
+Mistral is the policy-reasoning layer. It receives the user's question, intended audience, and a compact dictionary assembled from Elasticsearch results and deterministic calculations.
 
-## Technical setup
+The prompt requires a structured response containing:
 
-You'll need two things:
+- a decision-focused headline;
+- a direct recommendation;
+- sequenced actions with an accountable city actor;
+- measurable success checks;
+- limitations;
+- the identifiers of evidence actually used.
 
-1. **Elasticsearch Serverless (9.4+)** — [free trial](https://cloud.elastic.co/serverless-registration?utm_source=github&utm_medium=event&utm_campaign=2026-10-07-elastic-mistral-nyc-hacknight-amer&utm_content=link). A home for your data, and where Agent Builder lives.
-2. **Mistral API key(s)** — We'll hand these out at the event. Install the SDK with `pip install mistralai` (or `npm i @mistralai/mistralai`) and call Mistral's models, agents, OCR, and audio APIs directly. The same key works in Mistral Vibe.
+The API requests JSON structured output and validates it with Pydantic. It then compares every numeric token in the generated answer with the supplied evidence. If Mistral introduces an unsupported number, the answer is rejected instead of displayed.
 
-**How Elastic is used:** Elasticsearch can store and query an NYC dataset — full-text, aggregations, vector/semantic search — from a notebook, Dev Tools, your own app, or (optionally) Agent Builder.
+This division of responsibility is intentional:
 
-**How Mistral is used:** Mistral provides the AI capabilities and the tooling: chat and reasoning models, agents, embeddings, OCR, speech, moderation, and the Vibe coding CLI. Call Mistral directly from your own code (see the [Mistral guide](mistral_guide.md)), or register Mistral models as Elasticsearch inference endpoints (see [Using Mistral in Elasticsearch](using_mistral_in_elasticsearch.md)), whichever fits your idea.
+```text
+Elasticsearch finds and ranks evidence
+        ↓
+Python calculates reproducible scenarios
+        ↓
+Mistral chooses the decision-relevant story and actions
+        ↓
+Python validates the generated claims
+        ↓
+React presents the brief with its evidence and limitations
+```
 
----
+Elasticsearch therefore determines *what is true in the retrieved data*; Mistral determines *how to explain it and what decision it supports*. Neither component can be removed without changing the product.
 
-## Mistral capabilities to explore
+```mermaid
+flowchart LR
+    A[NYC and federal public data] --> B[Python ingestion]
+    B --> C[(Elasticsearch)]
+    C --> D[FastAPI evidence layer]
+    D --> E[React decision tools]
+    D --> F[Mistral Large 4]
+    F --> G[Validated action brief]
+    G --> E
+```
 
-Keep it open — these are prompts, not requirements. Any of these can anchor a project, and so can anything else Mistral offers:
+## Data sources
 
-| Capability | Where it shines |
+- [NYC Building Energy and Water Data Disclosure](https://data.cityofnewyork.us/Environment/NYC-Building-Energy-and-Water-Data-Disclosure-for-/5zyy-y8am/about_data)
+- [NYC Heat Vulnerability Index](https://a816-dohbesp.nyc.gov/IndicatorPublic/key-topics/climatehealth/hvi/)
+- [FloodNet NYC](https://www.floodnet.nyc/)
+- [NYC Department of Environmental Protection green infrastructure](https://data.cityofnewyork.us/Environment/DEP-Green-Infrastructure/)
+- [NYC Environment and Health Data Portal air quality](https://a816-dohbesp.nyc.gov/IndicatorPublic/)
+- [National Transit Database](https://www.transit.dot.gov/ntd)
+- [U.S. Energy Information Administration](https://www.eia.gov/opendata/)
+- [U.S. Environmental Protection Agency emissions factors](https://www.epa.gov/climateleadership/ghg-emission-factors-hub)
+
+## Quick start
+
+### Prerequisites
+
+- Python 3.11+
+- Node.js 20+
+- An Elasticsearch deployment
+- A Mistral API key with access to `mistral-large-4`
+
+### 1. Configure the environment
+
+```bash
+cp .env.example .env
+```
+
+Fill in the required values:
+
+```dotenv
+ELASTIC_ENDPOINT=https://your-elasticsearch-endpoint
+ELASTIC_API_KEY=your-elasticsearch-api-key
+MISTRAL_API_KEY=your-mistral-api-key
+MISTRAL_MODEL=mistral-large-4
+```
+
+Never commit `.env`. It is excluded by `.gitignore`.
+
+### 2. Install and index the data
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python setup_carbon_copy.py
+```
+
+### 3. Start the API
+
+```bash
+source .venv/bin/activate
+uvicorn api:app --reload --port 8000
+```
+
+### 4. Start the React interface
+
+In another terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open [http://localhost:5173](http://localhost:5173).
+
+### Optional: original Evidence Lab
+
+```bash
+source .venv/bin/activate
+streamlit run app.py
+```
+
+Open [http://localhost:8501](http://localhost:8501).
+
+## API overview
+
+| Endpoint | Purpose |
 |---|---|
-| **Vibe coding & CLI** | Build faster with the Mistral Vibe coding CLI |
-| **Agents** | Mistral agents with built-in web search, code interpreter, and document library, plus your own function tools (like an Elasticsearch query) |
-| **Reasoning & chat** | Multi-step analysis, planning, summarizing, and answering harder questions |
-| **Function calling & structured outputs** | Turn messy NYC text into clean JSON, or let a model decide which query to run |
-| **Embeddings** | Meaning-based search and RAG over NYC text (violations, 311 complaints, squirrel sightings) |
-| **OCR & Document AI** | Read scanned documents and photos, like the 1940s tax photos |
-| **Vision** | Understand images, like City Nature Challenge observation photos |
-| **Speech & audio (Voxtral)** | Voice-driven NYC assistants; transcribe street recordings |
-| **Content moderation** | Flag or filter user input and dataset text |
-| **Vibe Work** | Run agentic tasks in the browser, and plug in tools through MCP connectors |
+| `GET /api/health` | Service and Mistral-model status |
+| `GET /api/overview` | Evidence-page metrics and chart data |
+| `POST /api/brief` | Evidence-bounded Mistral action brief |
+| `GET /api/trees` | Weighted Elasticsearch neighborhood ranking |
+| `GET /api/buildings/search` | Building autocomplete and fuzzy search |
+| `GET /api/buildings/{property_id}/peers` | Comparable-building benchmark |
 
-See the [Mistral guide](using_mistral_in_elasticsearch.md) for how to get started, and [Mistral's docs](https://docs.mistral.ai/) for what's available.
+Interactive API documentation is available at [http://localhost:8000/docs](http://localhost:8000/docs) while FastAPI is running.
+
+## Methodology and guardrails
+
+### Building benchmark
+
+The initial peer group uses the same property type and report year, floor area within 25%, and construction year within 15 years. For unusual buildings, the bounds widen transparently until at least three peers are available.
+
+```text
+benchmark gap =
+  (building intensity - peer median intensity)
+  × building floor area
+  ÷ 1,000
+```
+
+This is a descriptive benchmark, not a retrofit forecast, engineering recommendation, or legal Local Law 97 determination.
+
+### Bus scenario
+
+The operating comparison applies user-selected energy prices to a common FY2024 travel baseline. Operational emissions use published fuel and grid factors. Capital and ownership costs are intentionally excluded and named in the interface.
+
+### Tree priority model
+
+Elasticsearch normalizes the Heat Vulnerability Index, vegetation deficit, and household A/C-access deficit before applying user-controlled relative weights. The result identifies neighborhoods for planning—not individual planting sites.
+
+### AI grounding
+
+Mistral receives a compact evidence dictionary rather than unrestricted application state. Generated numeric claims must match the supplied evidence or the API rejects the response.
+
+## Project structure
+
+```text
+.
+├── api.py                    # FastAPI endpoints
+├── app.py                    # Original Streamlit Evidence Lab
+├── carbon_copy.py            # Building search and peer analysis
+├── bus_scenario.py           # Fleet cost and emissions model
+├── climate_signals.py        # Flood, infrastructure, and air-quality data
+├── executive_briefing.py     # Mistral action-brief orchestration
+├── heat_priority.py          # Weighted neighborhood ranking
+├── setup_carbon_copy.py      # Elasticsearch setup and ingestion
+├── frontend/
+│   └── src/                  # React interface and styles
+└── requirements.txt
+```
+
+## Three-minute demo
+
+1. Open **Evidence** and move the diesel-price slider to show budget exposure.
+2. Change the tree-priority weights and watch the neighborhood ranking update.
+3. Search for **432 Park Avenue** and open its greener-twin comparison.
+4. Return to **Ask Mistral** and generate a Mayor / City Hall action brief.
+5. Point out the evidence IDs, measurable actions, and explicit limitations.
+
+## Development checks
+
+```bash
+python -m py_compile api.py carbon_copy.py bus_scenario.py climate_signals.py executive_briefing.py heat_priority.py
+cd frontend && npm run build
+```
+
+## License
+
+This project is available under the [MIT License](LICENSE). Public datasets remain subject to their respective publishers' terms and attribution requirements.
 
 ---
 
-## Public NYC Datasets
-
-Suggested starting points — **you are not restricted to these, use any NYC dataset you find.** Most [NYC Open Data](https://opendata.cityofnewyork.us/) sets have a direct JSON/CSV API (Socrata), so they're easy to ingest (see [open_challenge.md](open_challenge.md)).
-
-Each dataset ships with a ready-to-run ingest notebook in this repo — connect your Elastic project, run all cells, done. Starting from Mistral instead? Each notebook's data-fetch cell doesn't need Elasticsearch, so you can lift it out, process the data with Mistral first, and index the results when you're ready.
-
-| Dataset | Description | Ingest notebook |
-|---|---|---|
-| **[DOHMH Restaurant Inspection Results](https://data.cityofnewyork.us/Health/DOHMH-New-York-City-Restaurant-Inspection-Results/43nn-pn8j/data_preview)** | Every NYC restaurant inspection: grades, scores, violations, cuisine, borough, location. Rich text + categories + geo — great for aggregations and semantic search alike. | [nyc_restaurant_analyst.ipynb](nyc_restaurant_analyst.ipynb) |
-| **[2018 Central Park Squirrel Census](https://data.cityofnewyork.us/Environment/2018-Central-Park-Squirrel-Census-Stories/gfqj-f768/about_data)** | Field notes and stories from an actual census of Central Park's squirrels. Delightfully weird narrative text, perfect for embeddings. | [nyc_squirrel_census.ipynb](nyc_squirrel_census.ipynb) |
-| **[311 Public Feedback / complaint types](https://data.cityofnewyork.us/City-Government/Public-feedback-on-311-request-complaint-types/7ffd-6gs9/about_data)** | Free-text feedback New Yorkers submit to 311. Ideal for semantic search and Mistral moderation (plus a pointer to the giant 311 Service Requests set). | [nyc_311_feedback.ipynb](nyc_311_feedback.ipynb) |
-| **[MTA Subway Real-Time Feeds](https://api.mta.info/#/subwayRealTimeFeeds)** | Live train positions and arrival predictions (GTFS-Realtime). Real-time data for a live agent. | [mta_subway_realtime.ipynb](mta_subway_realtime.ipynb) |
-| **[MTA Subway Schedule](https://www.mta.info/developers)** | Static GTFS schedule — routes, stops (with geo), timetables. Pairs with the live feed. | [mta_subway_schedule.ipynb](mta_subway_schedule.ipynb) |
-| **[NYC 1940s Tax Photos](https://nycrecords.access.preservica.com/uncategorized/SO_d501be84-e09a-4023-bb8a-263aa8b0e04f/)** | ~720,000 WPA photographs of every NYC building (1939–1941), with block/lot signboards. A real-world **Mistral OCR** stress test. | [nyc_tax_photos.ipynb](nyc_tax_photos.ipynb) + [tax_photos_scraper.py](tax_photos_scraper.py) |
-| **[SONYC Urban Sound Tagging](https://zenodo.org/records/2590742)** | Thousands of 10-second street recordings from NYC's acoustic sensor network, tagged across 23 sound classes. Great for **Mistral Voxtral** speech-to-text. | [nyc_sonyc_sound.ipynb](nyc_sonyc_sound.ipynb) |
-| **[City Nature Challenge: NYC](https://www.inaturalist.org/projects/city-nature-challenge-2025-new-york-city)** | ~22,000 geo-tagged iNaturalist observations of NYC's wild plants, birds, bugs and fungi — each with a **photo** (and sometimes **audio**). The most multimodal set here: images, audio, and text. | [nyc_city_nature_challenge.ipynb](nyc_city_nature_challenge.ipynb) |
-
-Mix datasets freely — e.g., join 311 rat complaints with restaurant rodent violations by neighborhood, overlay the squirrel census (or City Nature Challenge sightings) on subway stops, or OCR a block's 1940s photos and cross-reference today's inspection grades.
-
-> **Tax photos need a scraper first.** Images live in the NYC Municipal Archives (Preservica), not a flat API. Run `python tax_photos_scraper.py --borough richmond --max 50` to pull a batch (images + `metadata.csv`), then run the notebook to OCR and index them. The scraper is rate-limited and sends a descriptive User-Agent — it's a city-government server, so be a good citizen. Non-commercial use is exempt from licensing; credit published output as *1940s Tax Department photographs, Courtesy of the Municipal Archives, City of New York.*
-
----
-
-## Prizes
-
-The **top three projects** win — a unique Lego set!
-
-Good luck, have fun, and happy hacking! 🗽
-
----
-
-## Resources
-
-Handy documentation and references for tonight.
-
-### Getting started
-- [Elasticsearch quickstart](https://www.elastic.co/docs/solutions/search/get-started) — your first index and query
-- [Connecting to Elasticsearch](https://www.elastic.co/docs/reference/elasticsearch/clients) — endpoints, API keys, and client setup
-
-### Mistral
-- [Mistral guide (this repo)](mistral_guide.md) — getting started with Mistral in a hack setting
-- [Mistral docs](https://docs.mistral.ai/) · [models overview](https://docs.mistral.ai/getting-started/models/models_overview/)
-- SDKs: [Python](https://github.com/mistralai/client-python) · [TypeScript](https://github.com/mistralai/client-ts)
-- [Agents API](https://docs.mistral.ai/agents/introduction) · [built-in tools](https://docs.mistral.ai/agents/tools/)
-- [Function calling](https://docs.mistral.ai/capabilities/function_calling/) · [structured outputs](https://docs.mistral.ai/capabilities/structured_output/)
-- [Document AI / OCR](https://docs.mistral.ai/capabilities/document_ai/) · [vision](https://docs.mistral.ai/capabilities/vision/) · [Voxtral audio](https://docs.mistral.ai/capabilities/audio/) · [moderation](https://docs.mistral.ai/capabilities/guardrailing/)
-- [Mistral Vibe](https://docs.mistral.ai/mistral-vibe/introduction) — the coding CLI ([GitHub](https://github.com/mistralai/mistral-vibe))
-- [Vibe Work](https://docs.mistral.ai/vibe/work/get-started) — agentic tasks and MCP connectors in the browser
-- [Mistral cookbook](https://github.com/mistralai/cookbook) — runnable examples
-
-### Mistral inside Elasticsearch
-- [Using Mistral in Elasticsearch (this repo)](using_mistral_in_elasticsearch.md) — inference endpoints, `semantic_text`, and Agent Builder
-- [Create a Mistral inference endpoint (API)](https://www.elastic.co/docs/api/doc/elasticsearch/operation/operation-inference-put-mistral)
-
-### Agent Builder (optional)
-- [Agent Builder overview](https://www.elastic.co/docs/explore-analyze/ai-features/elastic-agent-builder)
-- [Building custom tools](https://www.elastic.co/docs/explore-analyze/ai-features/agent-builder/tools/custom-tools)
-- [Building custom agents](https://www.elastic.co/docs/explore-analyze/ai-features/agent-builder/custom-agents)
-- [Using different models in Agent Builder](https://www.elastic.co/docs/solutions/search/agent-builder/models)
-- [Expose agents over MCP](https://www.elastic.co/docs/explore-analyze/ai-features/agent-builder/mcp-server) — connect to Claude, Mistral Vibe, or your own app
-
-### Search & querying
-- [ES|QL reference](https://www.elastic.co/docs/explore-analyze/query-filter/languages/esql) — a concise query language for search and aggregations
-- [Query DSL](https://www.elastic.co/docs/explore-analyze/query-filter/languages/querydsl) — full-text, filters, and boolean queries
-- [Aggregations](https://www.elastic.co/docs/explore-analyze/query-filter/aggregations) — stats, terms, and metrics
-
-### Vector & semantic search (great for RAG)
-- [Semantic search with `semantic_text`](https://www.elastic.co/docs/solutions/search/semantic-search/semantic-search-semantic-text) — the fastest path to semantic search
-- [kNN / dense vector search](https://www.elastic.co/docs/solutions/search/vector/knn)
-- [Bringing your own embeddings](https://www.elastic.co/docs/reference/elasticsearch/mapping-reference/dense-vector)
-
-### Ingesting data
-- [Python Elasticsearch client](https://www.elastic.co/docs/reference/elasticsearch/clients/python) — what the notebook uses
-- [Bulk API](https://www.elastic.co/docs/api/doc/elasticsearch/operation/operation-bulk) — efficient batch indexing
-- [Upload a file in Kibana](https://www.elastic.co/docs/manage-data/ingest/upload-data-files) — no-code CSV/JSON ingest
+Built for the Elastic × Mistral NYC Hack Night.
