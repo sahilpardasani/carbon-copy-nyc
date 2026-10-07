@@ -5,6 +5,7 @@ from functools import lru_cache
 from typing import Literal
 
 import requests
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -22,6 +23,8 @@ from carbon_copy import INDEX_NAME, elastic_client, find_peers, mistral_structur
 from climate_signals import ensure_climate_signals
 from executive_briefing import JAN_2026_DIESEL_AVG, SEP_2026_DIESEL_AVG, _dynamic_brief, _fallback_topic
 from heat_priority import allocate_trees, ensure_heat_data, rank_neighborhoods
+
+load_dotenv()
 
 app = FastAPI(title="Carbon Copy NYC API", version="1.0.0")
 app.add_middleware(
